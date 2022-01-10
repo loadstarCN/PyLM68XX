@@ -3,11 +3,12 @@
 
 '''
 2017@Olive Software 
-LM6824A读卡器Python驱动程序
+LM6824B读卡器Python驱动程序
 
 '''
 
 import glob,platform,serial,struct,binascii,time,sys
+import serial.tools.list_ports
 
 #计算BCC异或校验最后一位 输入格式[0x00,0x01,0x02....]
 def bcc(data):
@@ -61,15 +62,15 @@ class RFIDReader(serial.Serial):
 			print("空数据!")
 			return False
 
-		if not (ord(data[0]) ==0x55 and ord(data[1]) ==0x55):
+		if not (data[0] ==0x55 and data[1] ==0x55):
 			print("数据起始位格式错误!")
 			return False
 
-		if not check_bcc([ord(c) for c in data]):
+		if not check_bcc([c for c in data]):
 			print("数据校验位错误!")
 			return False
 
-		if not ord(data[6])==0x00:
+		if not data[6]==0x00:
 			print("命令操作返回结果代码为错误!")
 			return False
 
@@ -91,7 +92,7 @@ class RFIDReader(serial.Serial):
 		_data.extend([0x00])		#地址字
 		_data.extend([0x00,0x06])	#长度字 从命令字到最后一个字节
 		_data.extend([0x01,0x07])	#命令字
-		_data.extend([address/256,address%256])		#读卡器射频芯片内部EEPROM的字节地址:0030，大端
+		_data.extend([address//256,address%256])		#读卡器射频芯片内部EEPROM的字节地址:0030，大端
 		_data.append(length)			#要读取数据的长度:01
 		_data.append(bcc(_data))	#校验字
 		
@@ -116,9 +117,9 @@ class RFIDReader(serial.Serial):
 		_data=[0x55,0x55]			#命令头
 		_data.extend([0x00])		#保留字
 		_data.extend([0x00])		#地址字
-		_data.extend([(len(data)+6)/256,(len(data)+6)%256])	#长度字 从命令字到最后一个字节
+		_data.extend([(len(data)+6)//256,(len(data)+6)%256])	#长度字 从命令字到最后一个字节
 		_data.extend([0x01,0x08])	#命令字
-		_data.extend([address/256,address%256])	#读卡器射频芯片内部EEPROM的字节地址:0030，大端
+		_data.extend([address//256,address%256])	#读卡器射频芯片内部EEPROM的字节地址:0030，大端
 		_data.append(len(data))		#要写入数据的长度:01
 		_data.extend(data)		#写入的数据
 		_data.append(bcc(_data))	#校验字
@@ -130,7 +131,8 @@ class RFIDReader(serial.Serial):
 			ret=self.readall()
 			if self.check_return_bytes(ret):
 				_value=True
-				print('成功写读卡芯片EEPROM起始地址:{} 数据:{}'.format(hex(address), int2hex_str(data)))
+				
+				print('成功写读卡芯片EEPROM起始地址:{} 数据:{}'.format(hex(address), data))
 	
 			self.flushInput()
 		except Exception as ex:
@@ -252,8 +254,17 @@ class RFIDReader(serial.Serial):
 	def get_list():
 		reader_list=[]
 		usb_list=[]
-		if platform.system()=='Darwin':
+		print("当前操作系统:"+platform.system())
+
+		if platform.system() =="Windows":
+			usb_list = []
+			com_list=list(serial.tools.list_ports.comports())
+			for p in com_list:
+				usb_list.append(p[0])
+
+		elif platform.system()=='Darwin':
 			usb_list=glob.glob(r'/dev/tty.usbmodem*')
+
 		else:
 			usb_list=glob.glob(r'/dev/ttyACM*')
 		try:
@@ -270,10 +281,14 @@ class RFIDReader(serial.Serial):
 
 
 if __name__ == "__main__":
-	ser=RFIDReader.get_list()[0]
-	ser.print_info()
-	ser.read_eeprom(0x30,16)
-	ser.write_eeprom(0x30,[0x00]*16)
-	ser.read_eeprom(0x30,16)
 
+	ser_list = RFIDReader.get_list()
+	if len(ser_list)>0:
+		ser=ser_list[0]
+		# ser.print_info()
+		# ser.read_eeprom(0x30,16)
+		ser.write_eeprom(0x30,[0x01]*16)
+		# ser.read_eeprom(0x30,16)
+	else:
+		print("没有发现串口设备，程序退出")
 		
